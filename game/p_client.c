@@ -1296,7 +1296,7 @@ to be placed into the game.  This will happen every level load.
 void ClientBegin (edict_t *ent)
 {
 	int		i;
-
+	ent->pokeTeam = 1;
 	ent->client = game.clients + (ent - g_edicts - 1);
 
 	if (deathmatch->value)
@@ -1559,6 +1559,7 @@ void PrintPmove (pmove_t *pm)
 	Com_Printf ("sv %3i:%i %i\n", pm->cmd.impulse, c1, c2);
 }
 
+
 /*
 ==============
 ClientThink
@@ -1567,6 +1568,7 @@ This will be called once for each client frame, which will
 usually be a couple times for each server frame.
 ==============
 */
+extern void SelectAlly(edict_t* self);
 void ClientThink (edict_t *ent, usercmd_t *ucmd)
 {
 	gclient_t	*client;
@@ -1588,7 +1590,25 @@ void ClientThink (edict_t *ent, usercmd_t *ucmd)
 	}
 
 	pm_passent = ent;
+	if (ent->currentAlly && ent->currentAlly->isCurrentAlly) {
+		if (ent->moveButton != 0) {
+			moves* moveSet = getMoves(ent->currentAlly);
+			if (moveSet) {
+				// Copy the pointers safely
+				ent->moveSet[0] = moveSet[0];
+				ent->moveSet[1] = moveSet[1];
+				ent->moveSet[2] = moveSet[2];
+				ent->moveSet[3] = moveSet[3];
 
+				// Execute the chosen move
+				moves selectedMove = ent->moveSet[ent->moveButton - 1];
+				if (selectedMove) {
+					selectedMove(ent->currentAlly);
+				}
+			}
+			ent->moveButton = 0;
+		}
+	}
 	if (ent->client->chase_target) {
 
 		client->resp.cmd_angles[0] = SHORT2ANGLE(ucmd->angles[0]);

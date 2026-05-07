@@ -100,7 +100,6 @@ edict_t *findradius (edict_t *from, vec3_t org, float rad)
 	return NULL;
 }
 
-
 /*
 =============
 G_PickTarget

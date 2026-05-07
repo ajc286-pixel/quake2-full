@@ -313,28 +313,47 @@ void HelpComputer (edict_t *ent)
 	else
 		sk = "hard+";
 
+		// send the layout
+	Com_sprintf(string, sizeof(string),
+		"xv 0 yv 0 cstring2 \"%s\" "
+		"xv 0 yv 10 cstring2 \"%s\" "
+		"xv 0 yv 20 cstring2 \"%s\" "
+		"xv 0 yv 30 cstring2 \"%s\" ",
+		"Grenades capture enemies",
+		"Captured enemies can controlled with blaster",
+		"Press the key to make them attack",
+		"Other weapons buff your allies");
+
+	gi.WriteByte(svc_layout);
+	gi.WriteString(string);
+	gi.unicast(ent, true);
 	// send the layout
-	Com_sprintf (string, sizeof(string),
-		"xv 32 yv 8 picn help "			// background
-		"xv 202 yv 12 string2 \"%s\" "		// skill
-		"xv 0 yv 24 cstring2 \"%s\" "		// level name
-		"xv 0 yv 54 cstring2 \"%s\" "		// help 1
-		"xv 0 yv 110 cstring2 \"%s\" "		// help 2
-		"xv 50 yv 164 string2 \" kills     goals    secrets\" "
-		"xv 50 yv 172 string2 \"%3i/%3i     %i/%i       %i/%i\" ", 
-		sk,
-		level.level_name,
-		game.helpmessage1,
-		game.helpmessage2,
-		level.killed_monsters, level.total_monsters, 
-		level.found_goals, level.total_goals,
-		level.found_secrets, level.total_secrets);
-
-	gi.WriteByte (svc_layout);
-	gi.WriteString (string);
-	gi.unicast (ent, true);
 }
-
+typedef void (*moves)(edict_t*);
+extern char** getMovesName(edict_t* self);
+void SelectAlly(edict_t* self) {
+	self->client->showinventory = false;
+	self->client->showscores = false;
+	self->client->showhelp = true;
+	self->client->pers.helpchanged = 0;
+	char	string[1024];
+	char** moveNames = getMovesName(self->currentAlly);
+	if (!moveNames) {
+		return;
+	}
+	Com_sprintf(string, sizeof(string),
+		"xl 0 yt 8 cstring2 \"%s%s\" "
+		"xl 0 yt 16 cstring2 \"%s%s\" "
+		"xl 0 yt 24 cstring2 \"%s%s\" "
+		"xl 0 yt 32 cstring2 \"%s%s\" ",
+		"Move 1 (F5): ", moveNames[0],
+		"Move 2 (F6): ", moveNames[1],
+		"Move 3 (F7): ", moveNames[2],
+		"Move 4 (F8): ", moveNames[3]);
+	gi.WriteByte(svc_layout);
+	gi.WriteString(string);
+	gi.unicast(self, true);
+}
 
 /*
 ==================

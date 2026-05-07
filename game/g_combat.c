@@ -487,18 +487,18 @@ void T_Damage (edict_t *targ, edict_t *inflictor, edict_t *attacker, vec3_t dir,
 	if (take)
 	{
 		if ((targ->svflags & SVF_MONSTER) || (client))
-			SpawnDamage (TE_BLOOD, point, normal, take);
+			SpawnDamage (TE_BLOOD, point, normal, (take / targ->defenseMod) * attacker->damageMod);
 		else
-			SpawnDamage (te_sparks, point, normal, take);
+			SpawnDamage (te_sparks, point, normal, (take / targ->defenseMod) * attacker->damageMod);
 
 
-		targ->health = targ->health - take;
+		targ->health = targ->health - (take / targ->defenseMod) * attacker->damageMod;
 			
 		if (targ->health <= 0)
 		{
 			if ((targ->svflags & SVF_MONSTER) || (client))
 				targ->flags |= FL_NO_KNOCKBACK;
-			Killed (targ, inflictor, attacker, take, point);
+			Killed (targ, inflictor, attacker, (take / targ->defenseMod)* attacker->damageMod, point);
 			return;
 		}
 	}
@@ -557,7 +557,9 @@ void T_RadiusDamage (edict_t *inflictor, edict_t *attacker, float damage, edict_
 			continue;
 		if (!ent->takedamage)
 			continue;
-
+		if (ent->pokeTeam == inflictor->pokeTeam && ent != inflictor) {
+			continue;
+		}
 		VectorAdd (ent->mins, ent->maxs, v);
 		VectorMA (ent->s.origin, 0.5, v, v);
 		VectorSubtract (inflictor->s.origin, v, v);
@@ -569,6 +571,10 @@ void T_RadiusDamage (edict_t *inflictor, edict_t *attacker, float damage, edict_
 			if (CanDamage (ent, inflictor))
 			{
 				VectorSubtract (ent->s.origin, inflictor->s.origin, dir);
+				if (inflictor->poisonFlag) {
+					ent->poison = 500; 
+					ent->poisoned = 1;
+				}
 				T_Damage (ent, inflictor, attacker, dir, inflictor->s.origin, vec3_origin, (int)points, (int)points, DAMAGE_RADIUS, mod);
 			}
 		}

@@ -267,6 +267,10 @@ typedef struct gitem_s
 // it should be initialized at dll load time, and read/written to
 // the server.ssv file for savegames
 //
+
+
+
+
 typedef struct
 {
 	char		helpmessage1[512];
@@ -1057,6 +1061,7 @@ struct edict_s
 	int			deadflag;
 	qboolean	show_hostile;
 
+	
 	float		powerarmor_time;
 
 	char		*map;			// target_changelevel
@@ -1109,5 +1114,39 @@ struct edict_s
 	// common data blocks
 	moveinfo_t		moveinfo;
 	monsterinfo_t	monsterinfo;
+	// Fields for the mod
+
+	//if i have enough time these will make the monster change colors to reflect stat changes
+	int			red; //attack up
+	int			grey; //defense up
+	int			blue; //speed up
+	int			green; //heal (temporarily)
+
+	int			poison;
+	int			poisoned;
+	int			sleep;
+	int			sleeped;
+	int			paralysis;
+	int			paralyised;
+	int			poisonFlag;
+
+	void		(*moveSet[4])(edict_t*);
+	char*		moveNames[4];
+	int			moveCooldowns[4];
+	int			pokeTeam;
+	float		speedMod;
+	float		damageMod;
+	float		defenseMod;
+	int			hitCount;
+	int			inAir; //boolean flag for invulnerability
+	int			airTimer;
+	int			shotCount;
+	edict_t*	currentAlly;
+	int			isCurrentAlly;
+	int			moveButton;
 };
 
+typedef void (*moves)(edict_t*);
+extern moves* getMoves(edict_t* self);
+extern char** getMovesName(edict_t* self);
+extern void stand(edict_t* self);

@@ -433,6 +433,13 @@ qboolean FindTarget (edict_t *self)
 // revised behavior so they will wake up if they "see" a player make a noise
 // but not weapon impact/explosion noises
 
+
+
+	//don't find a target if friendly
+	if (self->pokeTeam == 1) {
+		return false;
+	}
+
 	heardit = false;
 	if ((level.sight_entity_framenum >= (level.framenum - 1)) && !(self->spawnflags & 1) )
 	{

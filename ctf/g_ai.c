@@ -432,7 +432,6 @@ qboolean FindTarget (edict_t *self)
 
 // revised behavior so they will wake up if they "see" a player make a noise
 // but not weapon impact/explosion noises
-
 	heardit = false;
 	if ((level.sight_entity_framenum >= (level.framenum - 1)) && !(self->spawnflags & 1) )
 	{

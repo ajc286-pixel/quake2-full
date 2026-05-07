@@ -27,6 +27,12 @@ static qboolean	is_quad;
 static byte		is_silenced;
 
 
+extern void fire_xSpeed(edict_t* self);
+extern void fire_xAttack(edict_t* self);
+extern void fire_xDefense(edict_t* self);
+extern void fire_potion(edict_t* self);
+extern void fire_full_heal(edict_t* self);
+
 void weapon_grenade_fire (edict_t *ent, qboolean held);
 
 
@@ -543,6 +549,7 @@ GRENADE
 #define GRENADE_MINSPEED	400
 #define GRENADE_MAXSPEED	800
 
+extern void fire_pokeball(edict_t* self, vec3_t start, vec3_t aimdir, int damage, int speed, float timer, float damage_radius, qboolean held);
 void weapon_grenade_fire (edict_t *ent, qboolean held)
 {
 	vec3_t	offset;
@@ -563,7 +570,7 @@ void weapon_grenade_fire (edict_t *ent, qboolean held)
 
 	timer = ent->client->grenade_time - level.time;
 	speed = GRENADE_MINSPEED + (GRENADE_TIMER - timer) * ((GRENADE_MAXSPEED - GRENADE_MINSPEED) / GRENADE_TIMER);
-	fire_grenade2 (ent, start, forward, damage, speed, timer, radius, held);
+	fire_pokeball (ent, start, forward, damage, speed, timer, radius, held);
 
 	if (! ( (int)dmflags->value & DF_INFINITE_AMMO ) )
 		ent->client->pers.inventory[ent->client->ammo_index]--;
@@ -745,7 +752,8 @@ void Weapon_GrenadeLauncher (edict_t *ent)
 	static int	pause_frames[]	= {34, 51, 59, 0};
 	static int	fire_frames[]	= {6, 0};
 
-	Weapon_Generic (ent, 5, 16, 59, 64, pause_frames, fire_frames, weapon_grenadelauncher_fire);
+	Weapon_Generic (ent, 5, 16, 59, 64, pause_frames, fire_frames, fire_xSpeed);
+	
 }
 
 /*
@@ -798,10 +806,10 @@ void Weapon_RocketLauncher_Fire (edict_t *ent)
 
 void Weapon_RocketLauncher (edict_t *ent)
 {
-	static int	pause_frames[]	= {25, 33, 42, 50, 0};
-	static int	fire_frames[]	= {5, 0};
+	static int	pause_frames[] = { 34, 51, 59, 0 };
+	static int	fire_frames[] = { 6, 0 };
 
-	Weapon_Generic (ent, 4, 12, 50, 54, pause_frames, fire_frames, Weapon_RocketLauncher_Fire);
+	Weapon_Generic(ent, 5, 16, 59, 64, pause_frames, fire_frames, fire_xDefense);
 }
 
 
@@ -936,10 +944,10 @@ void Weapon_HyperBlaster_Fire (edict_t *ent)
 
 void Weapon_HyperBlaster (edict_t *ent)
 {
-	static int	pause_frames[]	= {0};
-	static int	fire_frames[]	= {6, 7, 8, 9, 10, 11, 0};
+	static int	pause_frames[] = { 34, 51, 59, 0 };
+	static int	fire_frames[] = { 6, 0 };
 
-	Weapon_Generic (ent, 5, 20, 49, 53, pause_frames, fire_frames, Weapon_HyperBlaster_Fire);
+	Weapon_Generic(ent, 5, 16, 59, 64, pause_frames, fire_frames, fire_xAttack);
 }
 
 /*
@@ -1038,10 +1046,10 @@ void Machinegun_Fire (edict_t *ent)
 
 void Weapon_Machinegun (edict_t *ent)
 {
-	static int	pause_frames[]	= {23, 45, 0};
-	static int	fire_frames[]	= {4, 5, 0};
+	static int	pause_frames[] = { 34, 51, 59, 0 };
+	static int	fire_frames[] = { 6, 0 };
 
-	Weapon_Generic (ent, 3, 5, 45, 49, pause_frames, fire_frames, Machinegun_Fire);
+	Weapon_Generic(ent, 5, 16, 59, 64, pause_frames, fire_frames, fire_potion);
 }
 
 void Chaingun_Fire (edict_t *ent)
@@ -1166,10 +1174,10 @@ void Chaingun_Fire (edict_t *ent)
 
 void Weapon_Chaingun (edict_t *ent)
 {
-	static int	pause_frames[]	= {38, 43, 51, 61, 0};
-	static int	fire_frames[]	= {5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 0};
+	static int	pause_frames[] = { 34, 51, 59, 0 };
+	static int	fire_frames[] = { 6, 0 };
 
-	Weapon_Generic (ent, 4, 31, 61, 64, pause_frames, fire_frames, Chaingun_Fire);
+	Weapon_Generic(ent, 5, 16, 59, 64, pause_frames, fire_frames, fire_full_heal);
 }
 
 

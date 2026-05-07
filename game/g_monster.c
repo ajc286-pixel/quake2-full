@@ -19,7 +19,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 #include "g_local.h"
 
-
+extern void Land(edict_t* self);
 //
 // monster weapons
 //
@@ -415,10 +415,52 @@ void M_MoveFrame (edict_t *self)
 		move->frame[index].thinkfunc (self);
 }
 
-
 void monster_think (edict_t *self)
 {
-	M_MoveFrame (self);
+	if (self->red == 1) {
+		self->s.renderfx |= RF_SHELL_RED;
+	}
+	if (self->blue == 1) {
+		self->s.renderfx |= RF_SHELL_BLUE;
+	}
+	if (self->green >= 0) {
+		self->s.renderfx |= RF_SHELL_GREEN;
+	}
+	if (self->grey == 1) {
+		self->s.renderfx |= RF_SHELL_GREEN;
+	}
+	else {
+		self->s.renderfx &= ~RF_SHELL_GREEN;
+	}
+	if (self->poisoned == 1 && self->poison > 0) {
+		self->health--;
+		self->poison--;
+	}
+	if (self->inAir == 1) {
+		if (self->airTimer > 0) {
+			self->airTimer--;
+			self->s.renderfx |= RF_TRANSLUCENT;
+		}
+		else {
+			self->s.renderfx &= ~RF_TRANSLUCENT;
+			Land(self);
+		}
+	}
+	if (self->paralyised && self->paralysis > 0) {
+		self->paralysis--;
+	}
+	if (self->sleeped && self->sleep > 0) {
+		self->sleep--;
+		if (self->sleep <= 0) {
+			self->speed *= 2;
+		}
+	}
+	if (self->pokeTeam == 1 && !self->isCurrentAlly) {
+		stand(self);	
+	}
+	if ((self->sleep < 1 || !self->sleeped) || self->pokeTeam != 1) {
+		M_MoveFrame(self); //kinda sketchy but only move if you haven't been sleeped and the sleep timer is still running
+	}
 	if (self->linkcount != self->monsterinfo.linkcount)
 	{
 		self->monsterinfo.linkcount = self->linkcount;
@@ -550,6 +592,7 @@ qboolean monster_start (edict_t *self)
 		level.total_monsters++;
 
 	self->nextthink = level.time + FRAMETIME;
+	self->pokeTeam = 0;
 	self->svflags |= SVF_MONSTER;
 	self->s.renderfx |= RF_FRAMELERP;
 	self->takedamage = DAMAGE_AIM;

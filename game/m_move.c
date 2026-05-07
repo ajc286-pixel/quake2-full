@@ -118,7 +118,6 @@ qboolean SV_movestep (edict_t *ent, vec3_t move, qboolean relink)
 	float		stepsize;
 	vec3_t		test;
 	int			contents;
-
 // try the move	
 	VectorCopy (ent->s.origin, oldorg);
 	VectorAdd (ent->s.origin, move, neworg);
@@ -515,7 +514,6 @@ M_MoveToGoal
 void M_MoveToGoal (edict_t *ent, float dist)
 {
 	edict_t		*goal;
-	
 	goal = ent->goalentity;
 
 	if (!ent->groundentity && !(ent->flags & (FL_FLY|FL_SWIM)))

@@ -17,8 +17,9 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
+#pragma once
 #include "g_local.h"
-
+#include "g_weapon.h"
 
 /*
 =================
@@ -295,7 +296,60 @@ void fire_shotgun (edict_t *self, vec3_t start, vec3_t aimdir, int damage, int k
 		fire_lead (self, start, aimdir, damage, kick, TE_SHOTGUN, hspread, vspread, mod);
 }
 
+float distance(edict_t *ent1, edict_t *ent2) {
+	float dist = -1;
+	float xDist = ent1->s.origin[0] - ent2->s.origin[0];
+	float yDist = ent1->s.origin[1] - ent2->s.origin[1];
+	float zDist = ent1->s.origin[2] - ent2->s.origin[2];
+	dist = sqrtf(xDist * xDist + yDist * yDist + zDist * zDist);
+	return dist;
+}
+edict_t* get_nearest_enemy(edict_t* enemy, edict_t* self) {
+	edict_t* current;
+	current = g_edicts;
+	float dist = -1;
+	for (; current < &g_edicts[globals.num_edicts]; current++) {
+		if (!current->classname) {
+			continue;
+		}
+		if (!(current->svflags & SVF_MONSTER)) {
+			continue;
+		}
+		if (current->deadflag & DEAD_DEAD) {
+			continue;
+		}
+		if (distance(current, self) <= dist || dist == -1) {
+			enemy = current;
+			dist = distance(current, self);
+		}
+	}
+	return enemy;
+}
 
+void blaster_think(edict_t* self) {
+	vec3_t target_dir, new_dir;
+	float speed;
+	self->enemy = get_nearest_enemy(self->enemy, self);
+	if (!self->enemy) {
+		return;
+	}
+
+	speed = VectorLength(self->velocity);
+	VectorSubtract(self->enemy->s.origin, self->s.origin, target_dir);
+	VectorNormalize(target_dir);
+
+	for (int i = 0; i < 3; i++)
+	{
+		new_dir[i] = self->velocity[i] + (target_dir[i] * speed * 1);
+	}
+
+	VectorNormalize(new_dir);
+	VectorScale(new_dir, speed, self->velocity);
+
+	vectoangles(self->velocity, self->s.angles);
+
+	self->nextthink = level.time + FRAMETIME;
+}
 /*
 =================
 fire_blaster
@@ -341,51 +395,121 @@ void blaster_touch (edict_t *self, edict_t *other, cplane_t *plane, csurface_t *
 
 	G_FreeEdict (self);
 }
-
+extern void SelectAlly(edict_t* self);
 void fire_blaster (edict_t *self, vec3_t start, vec3_t dir, int damage, int speed, int effect, qboolean hyper)
 {
-	edict_t	*bolt;
-	trace_t	tr;
+	if (!self->client) {
+		edict_t* bolt;
+		trace_t	tr;
 
-	VectorNormalize (dir);
+		VectorNormalize(dir);
 
-	bolt = G_Spawn();
-	bolt->svflags = SVF_DEADMONSTER;
-	// yes, I know it looks weird that projectiles are deadmonsters
-	// what this means is that when prediction is used against the object
-	// (blaster/hyperblaster shots), the player won't be solid clipped against
-	// the object.  Right now trying to run into a firing hyperblaster
-	// is very jerky since you are predicted 'against' the shots.
-	VectorCopy (start, bolt->s.origin);
-	VectorCopy (start, bolt->s.old_origin);
-	vectoangles (dir, bolt->s.angles);
-	VectorScale (dir, speed, bolt->velocity);
-	bolt->movetype = MOVETYPE_FLYMISSILE;
-	bolt->clipmask = MASK_SHOT;
-	bolt->solid = SOLID_BBOX;
-	bolt->s.effects |= effect;
-	VectorClear (bolt->mins);
-	VectorClear (bolt->maxs);
-	bolt->s.modelindex = gi.modelindex ("models/objects/laser/tris.md2");
-	bolt->s.sound = gi.soundindex ("misc/lasfly.wav");
-	bolt->owner = self;
-	bolt->touch = blaster_touch;
-	bolt->nextthink = level.time + 2;
-	bolt->think = G_FreeEdict;
-	bolt->dmg = damage;
-	bolt->classname = "bolt";
-	if (hyper)
-		bolt->spawnflags = 1;
-	gi.linkentity (bolt);
+		bolt = G_Spawn();
+		bolt->svflags = SVF_DEADMONSTER;
+		// yes, I know it looks weird that projectiles are deadmonsters
+		// what this means is that when prediction is used against the object
+		// (blaster/hyperblaster shots), the player won't be solid clipped against
+		// the object.  Right now trying to run into a firing hyperblaster
+		// is very jerky since you are predicted 'against' the shots.
+		VectorCopy(start, bolt->s.origin);
+		VectorCopy(start, bolt->s.old_origin);
+		vectoangles(dir, bolt->s.angles);
+		VectorScale(dir, speed, bolt->velocity);
+		bolt->movetype = MOVETYPE_FLYMISSILE;
+		bolt->clipmask = MASK_SHOT;
+		bolt->solid = SOLID_BBOX;
+		bolt->s.effects |= effect;
+		VectorClear(bolt->mins);
+		VectorClear(bolt->maxs);
+		bolt->s.modelindex = gi.modelindex("models/objects/laser/tris.md2");
+		bolt->s.sound = gi.soundindex("misc/lasfly.wav");
+		bolt->owner = self;
+		bolt->touch = blaster_touch;
+		bolt->nextthink = level.time + FRAMETIME;
+		bolt->think = blaster_think;
+		bolt->dmg = damage;
+		bolt->classname = "bolt";
+		if (hyper)
+			bolt->spawnflags = 1;
+		gi.linkentity(bolt);
 
-	if (self->client)
-		check_dodge (self, bolt->s.origin, dir, speed);
+		if (self->client)
+			check_dodge(self, bolt->s.origin, dir, speed);
 
-	tr = gi.trace (self->s.origin, NULL, NULL, bolt->s.origin, bolt, MASK_SHOT);
-	if (tr.fraction < 1.0)
-	{
-		VectorMA (bolt->s.origin, -10, dir, bolt->s.origin);
-		bolt->touch (bolt, tr.ent, NULL, NULL);
+		tr = gi.trace(self->s.origin, NULL, NULL, bolt->s.origin, bolt, MASK_SHOT);
+		if (tr.fraction < 1.0)
+		{
+			VectorMA(bolt->s.origin, -10, dir, bolt->s.origin);
+			bolt->touch(bolt, tr.ent, NULL, NULL);
+		}
+	}
+	else {
+		vec3_t		from;
+		vec3_t		end;
+		trace_t		tr;
+		edict_t* ignore;
+		int			mask;
+		qboolean	water;
+
+		VectorMA(start, 8192, dir, end);
+		VectorCopy(start, from);
+		ignore = self;
+		water = false;
+		mask = MASK_SHOT | CONTENTS_SLIME | CONTENTS_LAVA;
+		while (ignore)
+		{
+			tr = gi.trace(from, NULL, NULL, end, ignore, mask);
+
+			if (tr.contents & (CONTENTS_SLIME | CONTENTS_LAVA))
+			{
+				mask &= ~(CONTENTS_SLIME | CONTENTS_LAVA);
+				water = true;
+			}
+			else
+			{
+				if ((tr.ent->svflags & SVF_MONSTER) || (tr.ent->client))
+					ignore = tr.ent;
+				else
+					ignore = NULL;
+
+				if ((tr.ent != self) && (tr.ent->takedamage))
+					if (tr.ent->pokeTeam == 1) {
+						//gi.dprintf("selected ally\n");
+						self->currentAlly = tr.ent;
+						tr.ent->isCurrentAlly = 1;
+						moves* moveSet = getMoves(self->currentAlly);
+						self->moveSet[0] = moveSet[0];
+						self->moveSet[1] = moveSet[1];
+						self->moveSet[2] = moveSet[2];
+						self->moveSet[3] = moveSet[3];
+						SelectAlly(self);
+					}
+					else {
+						T_Damage(tr.ent, self, self, dir, tr.endpos, tr.plane.normal, damage, 20, 60, MOD_RAILGUN);
+					}
+			}
+
+			VectorCopy(tr.endpos, from);
+		}
+
+		// send gun puff / flash
+		gi.WriteByte(svc_temp_entity);
+		gi.WriteByte(TE_RAILTRAIL);
+		gi.WritePosition(start);
+		gi.WritePosition(tr.endpos);
+		gi.multicast(self->s.origin, MULTICAST_PHS);
+		//	gi.multicast (start, MULTICAST_PHS);
+		if (water)
+		{
+			gi.WriteByte(svc_temp_entity);
+			gi.WriteByte(TE_RAILTRAIL);
+			gi.WritePosition(start);
+			gi.WritePosition(tr.endpos);
+			gi.multicast(tr.endpos, MULTICAST_PHS);
+		}
+
+		if (self->client)
+			PlayerNoise(self, tr.endpos, PNOISE_IMPACT);
 	}
 }	
 
@@ -421,7 +545,12 @@ static void Grenade_Explode (edict_t *ent)
 			mod = MOD_GRENADE;
 		T_Damage (ent->enemy, ent, ent->owner, dir, ent->s.origin, vec3_origin, (int)points, (int)points, DAMAGE_RADIUS, mod);
 	}
-
+	if (ent->poisonFlag == 1) {
+		if (ent->enemy) {
+			ent->enemy->poison = 500;
+			ent->enemy->poisoned;
+		}
+	}
 	if (ent->spawnflags & 2)
 		mod = MOD_HELD_GRENADE;
 	else if (ent->spawnflags & 1)
@@ -531,6 +660,10 @@ void fire_grenade2 (edict_t *self, vec3_t start, vec3_t aimdir, int damage, int 
 	VectorMA (grenade->velocity, 200 + crandom() * 10.0, up, grenade->velocity);
 	VectorMA (grenade->velocity, crandom() * 10.0, right, grenade->velocity);
 	VectorSet (grenade->avelocity, 300, 300, 300);
+	if (self->poisonFlag == 1) {
+		self->poisonFlag = 0;
+		grenade->poisonFlag = 1;
+	}
 	grenade->movetype = MOVETYPE_BOUNCE;
 	grenade->clipmask = MASK_SHOT;
 	grenade->solid = SOLID_BBOX;
@@ -559,6 +692,551 @@ void fire_grenade2 (edict_t *self, vec3_t start, vec3_t aimdir, int damage, int 
 		gi.linkentity (grenade);
 	}
 }
+void fire_grenade3(edict_t* self, vec3_t start, vec3_t aimdir, int damage, int speed, float timer, float damage_radius, qboolean held, qboolean poison) {
+	self->poisonFlag = 1;
+	fire_grenade2(self, start, aimdir, damage, speed, timer, damage_radius, held);
+	self->poisonFlag = 0;
+}
+
+void effectToAllEntitesInRadius(edict_t* self, void (*effect)(edict_t*, edict_t*), int dist){
+	edict_t* current;
+	current = g_edicts;
+	for (; current < &g_edicts[globals.num_edicts]; current++) {
+		if (!current->classname) {
+			continue;
+		}
+		if (!(current->svflags & SVF_MONSTER)) {
+			continue;
+		}
+		if (current->deadflag & DEAD_DEAD) {
+			continue;
+		}
+		if (distance(current, self) <= dist) {
+			effect(current, self);
+		}
+	}
+}
+
+
+
+void PokeBall_Effect(edict_t* target, edict_t* self) {
+	gi.dprintf("Enemy captured");
+	target->pokeTeam = 1;
+	target->team = 1;
+	target->owner = self;
+	target->s.renderfx &= RF_SHELL_RED;
+	if (!self->client) {
+		return;
+	}
+	self->currentAlly = target;
+	self->currentAlly->isCurrentAlly = 1;
+	moves* moveSet = getMoves(target);
+	char** moveNames = getMovesName(target);
+	self->moveSet[0] = moveSet[0];
+	self->moveSet[1] = moveSet[1];
+	self->moveSet[2] = moveSet[2];
+	self->moveSet[3] = moveSet[3];
+	self->moveNames[0] = moveNames[0];
+	self->moveNames[1] = moveNames[1];
+	self->moveNames[2] = moveNames[2];
+	self->moveNames[3] = moveNames[3]; // such bs
+
+}
+void PokeBall_Explode(edict_t* ent) {
+	effectToAllEntitesInRadius(ent, PokeBall_Effect, 500);
+	item_explode(ent);
+}
+void PokeBall_Touch(edict_t* ent, edict_t* other, cplane_t* plane, csurface_t* surf) {
+	if (other == ent->owner)
+		return;
+
+	if (surf && (surf->flags & SURF_SKY))
+	{
+		G_FreeEdict(ent);
+		return;
+	}
+
+	if (!other->takedamage)
+	{
+		if (ent->spawnflags & 1)
+		{
+			if (random() > 0.5)
+				gi.sound(ent, CHAN_VOICE, gi.soundindex("weapons/hgrenb1a.wav"), 1, ATTN_NORM, 0);
+			else
+				gi.sound(ent, CHAN_VOICE, gi.soundindex("weapons/hgrenb2a.wav"), 1, ATTN_NORM, 0);
+		}
+		else
+		{
+			gi.sound(ent, CHAN_VOICE, gi.soundindex("weapons/grenlb1b.wav"), 1, ATTN_NORM, 0);
+		}
+		return;
+	}
+	PokeBall_Explode(ent);
+}
+void fire_pokeball(edict_t* self, vec3_t start, vec3_t aimdir, int damage, int speed, float timer, float damage_radius, qboolean held) {
+	gi.dprintf("Throwing pokeball\n");
+	edict_t* grenade;
+	vec3_t	dir;
+	vec3_t	forward, right, up;
+
+	vectoangles(aimdir, dir);
+	AngleVectors(dir, forward, right, up);
+
+	grenade = G_Spawn();
+	VectorCopy(start, grenade->s.origin);
+	VectorScale(aimdir, speed, grenade->velocity);
+	VectorMA(grenade->velocity, 200 + crandom() * 10.0, up, grenade->velocity);
+	VectorMA(grenade->velocity, crandom() * 10.0, right, grenade->velocity);
+	VectorSet(grenade->avelocity, 300, 300, 300);
+	grenade->movetype = MOVETYPE_BOUNCE;
+	grenade->clipmask = MASK_SHOT;
+	grenade->solid = SOLID_BBOX;
+	grenade->s.effects |= EF_GRENADE;
+	VectorClear(grenade->mins);
+	VectorClear(grenade->maxs);
+	grenade->s.modelindex = gi.modelindex("models/objects/grenade2/tris.md2");
+	grenade->owner = self;
+	grenade->touch = PokeBall_Touch;
+	grenade->nextthink = level.time + timer;
+	grenade->think = PokeBall_Explode;
+	grenade->dmg = 0;
+	grenade->dmg_radius = damage_radius;
+	grenade->classname = "hgrenade";
+	grenade->spawnflags = 1;
+	grenade->s.sound = gi.soundindex("weapons/hgrenc1b.wav");
+	gi.sound(self, CHAN_WEAPON, gi.soundindex("weapons/hgrent1a.wav"), 1, ATTN_NORM, 0);
+	gi.linkentity(grenade);
+}
+
+
+void P_ProjectSource(gclient_t* client, vec3_t point, vec3_t distance, vec3_t forward, vec3_t right, vec3_t result) {
+	vec3_t	_distance;
+
+	VectorCopy(distance, _distance);
+	if (client->pers.hand == LEFT_HANDED)
+		_distance[1] *= -1;
+	else if (client->pers.hand == CENTER_HANDED)
+		_distance[1] = 0;
+	G_ProjectSource(point, _distance, forward, right, result);
+}
+void item_explode(edict_t* self) {
+	self->nextthink = 0;
+	G_FreeEdict(self);
+}
+void fire_item(edict_t* self, vec3_t start, vec3_t aimdir, int damage, int speed, float timer, float damage_radius, void (*touch)(edict_t* ent, edict_t* other, cplane_t* plane, csurface_t* surf), void(*explode)(edict_t* ent)) {
+	gi.dprintf("Firing item\n");
+	edict_t* grenade;
+	vec3_t	dir;
+	vec3_t	forward, right, up;
+	if (!aimdir) {
+		gi.dprintf("missing aim");
+		return;
+	}
+	vectoangles(aimdir, dir);
+	AngleVectors(dir, forward, right, up);
+
+	grenade = G_Spawn();
+	VectorCopy(start, grenade->s.origin);
+	VectorScale(aimdir, speed, grenade->velocity);
+	VectorMA(grenade->velocity, 200 + crandom() * 10.0, up, grenade->velocity);
+	VectorMA(grenade->velocity, crandom() * 10.0, right, grenade->velocity);
+	VectorSet(grenade->avelocity, 300, 300, 300);
+	grenade->movetype = MOVETYPE_BOUNCE;
+	grenade->clipmask = MASK_SHOT;
+	grenade->solid = SOLID_BBOX;
+	grenade->s.effects |= EF_GRENADE;
+	VectorClear(grenade->mins);
+	VectorClear(grenade->maxs);
+	grenade->s.modelindex = gi.modelindex("models/objects/grenade/tris.md2");
+	grenade->owner = self;
+	grenade->touch = touch;
+	grenade->nextthink = level.time + timer;
+	grenade->think = explode;
+	grenade->dmg = 0;
+	grenade->dmg_radius = damage_radius;
+	grenade->classname = "grenade";
+
+	gi.linkentity(grenade);
+	gi.dprintf("Fired Item\n");
+}
+static void XSpeed_Touch(edict_t* ent, edict_t* other, cplane_t* plane, csurface_t* surf)
+{
+	if (other == ent->owner)
+		return;
+
+	if (surf && (surf->flags & SURF_SKY))
+	{
+		G_FreeEdict(ent);
+		return;
+	}
+
+	if (!other->takedamage)
+	{
+		if (ent->spawnflags & 1)
+		{
+			if (random() > 0.5)
+				gi.sound(ent, CHAN_VOICE, gi.soundindex("weapons/hgrenb1a.wav"), 1, ATTN_NORM, 0);
+			else
+				gi.sound(ent, CHAN_VOICE, gi.soundindex("weapons/hgrenb2a.wav"), 1, ATTN_NORM, 0);
+		}
+		else
+		{
+			gi.sound(ent, CHAN_VOICE, gi.soundindex("weapons/grenlb1b.wav"), 1, ATTN_NORM, 0);
+		}
+		return;
+	}
+	if (other->pokeTeam == ent->pokeTeam) {
+		other->speed *= 1.5;
+		other->speedMod += 0.5;
+		other->blue = 1;
+	}
+	XSpeed_Explode(ent);
+}
+static void XSpeed_Effect(edict_t* ent, edict_t* other) {
+	if (other->pokeTeam == ent->pokeTeam) {
+		other->speed *= 1.5;
+		other->speedMod += 0.5;
+		other->blue = 1;
+	}
+
+}
+static void XSpeed_Explode(edict_t* ent) {
+	effectToAllEntitesInRadius(ent, XSpeed_Effect, 500);
+	item_explode(ent);
+}
+void fire_xSpeed(edict_t* ent){
+	gi.dprintf("Firing xspeed\n");
+
+	vec3_t	offset;
+	vec3_t	forward, right;
+	vec3_t	start;
+	int		damage = 0;
+	float	radius;
+
+	radius = damage + 40;
+
+	VectorSet(offset, 8, 8, ent->viewheight - 8);
+	AngleVectors(ent->client->v_angle, forward, right, NULL);
+	P_ProjectSource(ent->client, ent->s.origin, offset, forward, right, start);
+
+	VectorScale(forward, -2, ent->client->kick_origin);
+	ent->client->kick_angles[0] = -1;
+
+	fire_item(ent, start, forward, damage, 600, 2.5, radius, XSpeed_Touch, XSpeed_Explode);
+
+	gi.WriteByte(svc_muzzleflash);
+	gi.WriteShort(ent - g_edicts);
+	gi.WriteByte(MZ_GRENADE);
+	gi.multicast(ent->s.origin, MULTICAST_PVS);
+
+	ent->client->ps.gunframe++;
+
+	PlayerNoise(ent, start, PNOISE_WEAPON);
+
+	if (!((int)dmflags->value & DF_INFINITE_AMMO))
+		ent->client->pers.inventory[ent->client->ammo_index]--;
+}
+static void XAttack_Effect(edict_t* ent, edict_t* other) {
+	if (other->pokeTeam == ent->pokeTeam) {
+		other->damageMod *= 1.5;
+		other->red = 1;
+	}
+}
+static void XAttack_Explode(edict_t* ent) {
+	effectToAllEntitesInRadius(ent, XSpeed_Effect, 500);
+	item_explode(ent);
+}
+static void XAttack_Touch(edict_t* ent, edict_t* other, cplane_t* plane, csurface_t* surf)
+{
+	if (other == ent->owner)
+		return;
+
+	if (surf && (surf->flags & SURF_SKY))
+	{
+		G_FreeEdict(ent);
+		return;
+	}
+
+	if (!other->takedamage)
+	{
+		if (ent->spawnflags & 1)
+		{
+			if (random() > 0.5)
+				gi.sound(ent, CHAN_VOICE, gi.soundindex("weapons/hgrenb1a.wav"), 1, ATTN_NORM, 0);
+			else
+				gi.sound(ent, CHAN_VOICE, gi.soundindex("weapons/hgrenb2a.wav"), 1, ATTN_NORM, 0);
+		}
+		else
+		{
+			gi.sound(ent, CHAN_VOICE, gi.soundindex("weapons/grenlb1b.wav"), 1, ATTN_NORM, 0);
+		}
+		return;
+	}
+	if (other->pokeTeam == ent->pokeTeam) {
+		other->damageMod *= 1.5;
+		other->red = 1;
+	}
+	XAttack_Explode(ent);
+}
+void fire_xAttack(edict_t* ent){
+	vec3_t	offset;
+	vec3_t	forward, right;
+	vec3_t	start;
+	int		damage = 0;
+	float	radius;
+
+	radius = damage + 40;
+
+	VectorSet(offset, 8, 8, ent->viewheight - 8);
+	AngleVectors(ent->client->v_angle, forward, right, NULL);
+	P_ProjectSource(ent->client, ent->s.origin, offset, forward, right, start);
+
+	VectorScale(forward, -2, ent->client->kick_origin);
+	ent->client->kick_angles[0] = -1;
+
+	fire_item(ent, start, forward, damage, 600, 2.5, radius, XAttack_Touch, XAttack_Explode);
+
+	gi.WriteByte(svc_muzzleflash);
+	gi.WriteShort(ent - g_edicts);
+	gi.WriteByte(MZ_GRENADE);
+	gi.multicast(ent->s.origin, MULTICAST_PVS);
+
+	ent->client->ps.gunframe++;
+
+	PlayerNoise(ent, start, PNOISE_WEAPON);
+
+	if (!((int)dmflags->value & DF_INFINITE_AMMO))
+		ent->client->pers.inventory[ent->client->ammo_index]--;
+}
+
+
+static void XDefense_Effect(edict_t* ent, edict_t* other) {
+	if (other->pokeTeam == ent->pokeTeam) {
+		other->defenseMod *= 1.5;
+		other->grey = 1;
+	}
+}
+static void XDefense_Explode(edict_t* ent) {
+	effectToAllEntitesInRadius(ent, XDefense_Effect, 500);
+	item_explode(ent);
+}
+static void XDefense_Touch(edict_t* ent, edict_t* other, cplane_t* plane, csurface_t* surf)
+{
+	if (other == ent->owner)
+		return;
+
+	if (surf && (surf->flags & SURF_SKY))
+	{
+		G_FreeEdict(ent);
+		return;
+	}
+
+	if (!other->takedamage)
+	{
+		if (ent->spawnflags & 1)
+		{
+			if (random() > 0.5)
+				gi.sound(ent, CHAN_VOICE, gi.soundindex("weapons/hgrenb1a.wav"), 1, ATTN_NORM, 0);
+			else
+				gi.sound(ent, CHAN_VOICE, gi.soundindex("weapons/hgrenb2a.wav"), 1, ATTN_NORM, 0);
+		}
+		else
+		{
+			gi.sound(ent, CHAN_VOICE, gi.soundindex("weapons/grenlb1b.wav"), 1, ATTN_NORM, 0);
+		}
+		return;
+	}
+	if (other->pokeTeam == ent->pokeTeam) {
+		other->defenseMod *= 1.5;
+		other->grey = 1;
+	}
+	XDefense_Explode(ent);
+}
+void fire_xDefense(edict_t* ent){
+	vec3_t	offset;
+	vec3_t	forward, right;
+	vec3_t	start;
+	int		damage = 0;
+	float	radius;
+
+	radius = damage + 40;
+
+	VectorSet(offset, 8, 8, ent->viewheight - 8);
+	AngleVectors(ent->client->v_angle, forward, right, NULL);
+	P_ProjectSource(ent->client, ent->s.origin, offset, forward, right, start);
+
+	VectorScale(forward, -2, ent->client->kick_origin);
+	ent->client->kick_angles[0] = -1;
+
+	fire_item(ent, start, forward, damage, 600, 2.5, radius, XDefense_Touch, XDefense_Explode);
+
+	gi.WriteByte(svc_muzzleflash);
+	gi.WriteShort(ent - g_edicts);
+	gi.WriteByte(MZ_GRENADE);
+	gi.multicast(ent->s.origin, MULTICAST_PVS);
+
+	ent->client->ps.gunframe++;
+
+	PlayerNoise(ent, start, PNOISE_WEAPON);
+
+	if (!((int)dmflags->value & DF_INFINITE_AMMO))
+		ent->client->pers.inventory[ent->client->ammo_index]--;
+}
+
+
+static void Potion_Effect(edict_t* ent, edict_t* other) {
+	if (other->pokeTeam == ent->pokeTeam) {
+		other->health = other->health + 50 >= other->max_health ? other->max_health : other->health + 50;
+		other->green = 200;
+	}
+}
+static void Potion_Explode(edict_t* ent) {
+	effectToAllEntitesInRadius(ent, Potion_Effect, 500);
+	item_explode(ent);
+}
+static void Potion_Touch(edict_t* ent, edict_t* other, cplane_t* plane, csurface_t* surf)
+{
+	if (other == ent->owner)
+		return;
+
+	if (surf && (surf->flags & SURF_SKY))
+	{
+		G_FreeEdict(ent);
+		return;
+	}
+
+	if (!other->takedamage)
+	{
+		if (ent->spawnflags & 1)
+		{
+			if (random() > 0.5)
+				gi.sound(ent, CHAN_VOICE, gi.soundindex("weapons/hgrenb1a.wav"), 1, ATTN_NORM, 0);
+			else
+				gi.sound(ent, CHAN_VOICE, gi.soundindex("weapons/hgrenb2a.wav"), 1, ATTN_NORM, 0);
+		}
+		else
+		{
+			gi.sound(ent, CHAN_VOICE, gi.soundindex("weapons/grenlb1b.wav"), 1, ATTN_NORM, 0);
+		}
+		return;
+	}
+	if (other->pokeTeam == ent->pokeTeam) {
+		other->health = other->health + 50 >= other->max_health ? other->max_health : other->health + 50;
+		other->green = 200;
+	}
+	Potion_Explode(ent);
+}
+void fire_potion(edict_t* ent) {
+	gi.dprintf("Firing potion\n");
+
+	vec3_t	offset;
+	vec3_t	forward, right;
+	vec3_t	start;
+	int		damage = 0;
+	float	radius;
+
+	radius = damage + 40;
+
+	VectorSet(offset, 8, 8, ent->viewheight - 8);
+	AngleVectors(ent->client->v_angle, forward, right, NULL);
+	P_ProjectSource(ent->client, ent->s.origin, offset, forward, right, start);
+
+	VectorScale(forward, -2, ent->client->kick_origin);
+	ent->client->kick_angles[0] = -1;
+
+	fire_item(ent, start, forward, damage, 600, 2.5, radius, Potion_Touch, Potion_Explode);
+
+	gi.WriteByte(svc_muzzleflash);
+	gi.WriteShort(ent - g_edicts);
+	gi.WriteByte(MZ_GRENADE);
+	gi.multicast(ent->s.origin, MULTICAST_PVS);
+
+	ent->client->ps.gunframe++;
+
+	PlayerNoise(ent, start, PNOISE_WEAPON);
+
+	if (!((int)dmflags->value & DF_INFINITE_AMMO))
+		ent->client->pers.inventory[ent->client->ammo_index]--;
+}
+
+
+static void Full_Heal_Effect(edict_t* ent, edict_t* other) {
+	if (other->pokeTeam == ent->pokeTeam) {
+		other->poison = 0;
+		other->sleep = 0;
+		other->paralysis = 0;
+	}
+}
+static void Full_Heal_Explode(edict_t* ent) {
+	effectToAllEntitesInRadius(ent, Full_Heal_Effect, 500);
+	item_explode(ent);
+}
+static void Full_Heal_Touch(edict_t* ent, edict_t* other, cplane_t* plane, csurface_t* surf)
+{
+	if (other == ent->owner)
+		return;
+
+	if (surf && (surf->flags & SURF_SKY))
+	{
+		G_FreeEdict(ent);
+		return;
+	}
+
+	if (!other->takedamage)
+	{
+		if (ent->spawnflags & 1)
+		{
+			if (random() > 0.5)
+				gi.sound(ent, CHAN_VOICE, gi.soundindex("weapons/hgrenb1a.wav"), 1, ATTN_NORM, 0);
+			else
+				gi.sound(ent, CHAN_VOICE, gi.soundindex("weapons/hgrenb2a.wav"), 1, ATTN_NORM, 0);
+		}
+		else
+		{
+			gi.sound(ent, CHAN_VOICE, gi.soundindex("weapons/grenlb1b.wav"), 1, ATTN_NORM, 0);
+		}
+		return;
+	}
+	if (other->pokeTeam == ent->pokeTeam) {
+		other->poison = 0;
+		other->sleep = 0;
+		other->paralysis = 0;
+	}
+	Full_Heal_Explode(ent);
+}
+void fire_full_heal(edict_t* ent) {
+	gi.dprintf("Firing full heal\n");
+	vec3_t	offset;
+	vec3_t	forward, right;
+	vec3_t	start;
+	int		damage = 0;
+	float	radius;
+
+	radius = damage + 40;
+
+	VectorSet(offset, 8, 8, ent->viewheight - 8);
+	AngleVectors(ent->client->v_angle, forward, right, NULL);
+	P_ProjectSource(ent->client, ent->s.origin, offset, forward, right, start);
+
+	VectorScale(forward, -2, ent->client->kick_origin);
+	ent->client->kick_angles[0] = -1;
+
+	fire_item(ent, start, forward, damage, 600, 2.5, radius, Full_Heal_Touch, Full_Heal_Explode);
+
+	gi.WriteByte(svc_muzzleflash);
+	gi.WriteShort(ent - g_edicts);
+	gi.WriteByte(MZ_GRENADE);
+	gi.multicast(ent->s.origin, MULTICAST_PVS);
+
+	ent->client->ps.gunframe++;
+
+	PlayerNoise(ent, start, PNOISE_WEAPON);
+
+	if (!((int)dmflags->value & DF_INFINITE_AMMO))
+		ent->client->pers.inventory[ent->client->ammo_index]--;
+}
+
+
 
 
 /*
@@ -799,7 +1477,6 @@ void bfg_touch (edict_t *self, edict_t *other, cplane_t *plane, csurface_t *surf
 	gi.WritePosition (self->s.origin);
 	gi.multicast (self->s.origin, MULTICAST_PVS);
 }
-
 
 void bfg_think (edict_t *self)
 {
